@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  --font-reader: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Georgia, serif;
+}
+
+body.theme-light {
+  --bg-color: #F9F9F9; --text-color: #1C1C1E;
+  --glass-bg: rgba(255, 255, 255, 0.75); --glass-border: rgba(0, 0, 0, 0.05);
+  --selection-bg: #007AFF40;
+}
+body.theme-sepia {
+  --bg-color: #F4ECD8; --text-color: #433422;
+  --glass-bg: rgba(244, 236, 216, 0.75); --glass-border: rgba(67, 52, 34, 0.1);
+  --selection-bg: rgba(67, 52, 34, 0.2);
+}
+body.theme-oled {
+  --bg-color: #000000; --text-color: #D1D1D6;
+  --glass-bg: rgba(28, 28, 30, 0.65); --glass-border: rgba(255, 255, 255, 0.1);
+  --selection-bg: rgba(255, 255, 255, 0.2);
+}
+
+body {
+  background-color: var(--bg-color); color: var(--text-color); font-family: var(--font-reader);
+  transition: background-color 0.5s ease, color 0.5s ease; overflow-x: hidden;
+}
+
+::selection { background-color: var(--selection-bg); }
+::-webkit-scrollbar { width: 0px; background: transparent; }
+
+.prose-reader p { margin-bottom: 1.5em; text-align: justify; hyphens: auto; }
+.prose-reader img { max-height: 50vh; border-radius: 12px; margin: 2rem auto; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+.drop-caps p:first-of-type::first-letter { float: left; font-size: 3.5em; line-height: 0.8; margin-right: 0.1em; margin-top: 0.05em; font-weight: 700; font-family: Georgia, serif; }
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--glass-border); border-bottom: 1px solid var(--glass-border);
+}
