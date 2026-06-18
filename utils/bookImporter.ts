@@ -1,11 +1,10 @@
-// utils/bookImporter.ts
 import ePub from 'epubjs';
 import * as pdfjsLib from 'pdfjs-dist';
 import { UnifiedBook, UnifiedChapter } from '../types';
 
-// Подключаем Web Worker для PDF.js через надежный CDN, чтобы не нагружать Next.js
+// Надежный Worker: берем точную версию библиотеки, которая установлена у тебя
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 }
 
 // ==========================================
@@ -153,57 +152,68 @@ async function parseTxt(file: File): Promise<UnifiedBook> {
 }
 
 // ==========================================
-// ПАРСЕР 4: PDF (Извлечение чистого текста)
+// ПАРСЕР 4: PDF (Бронебойная версия)
 // ==========================================
 async function parsePdf(file: File): Promise<UnifiedBook> {
-  const arrayBuffer = await file.arrayBuffer();
-  
-  // Загружаем документ
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  
-  const chapters: UnifiedChapter[] = [];
-  const pagesPerChapter = 15; // Группируем каждые 15 страниц в одну "Главу"
-  let currentContent = '';
-  let wordCount = 0;
-
-  // Проходимся по всем страницам PDF
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
+  try {
+    const arrayBuffer = await file.arrayBuffer();
     
-    // Склеиваем кусочки текста на странице
-    const pageText = textContent.items
-      .map((item: any) => item.str)
-      .join(' ')
-      .replace(/\s+/g, ' ') // Убираем двойные пробелы
-      .trim();
+    // Загружаем документ с поддержкой нестандартных шрифтов (CMap)
+    const loadingTask = pdfjsLib.getDocument({ 
+      data: arrayBuffer,
+      cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+      cMapPacked: true,
+    });
+    
+    const pdf = await loadingTask.promise;
+    const chapters: UnifiedChapter[] = [];
+    const pagesPerChapter = 15; 
+    let currentContent = '';
+    let wordCount = 0;
 
-    if (pageText) {
-      currentContent += `<p>${pageText}</p>`;
-      wordCount += pageText.split(' ').length;
-    }
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-    // Если набрали 15 страниц ИЛИ это последняя страница книги — сохраняем главу
-    if (i % pagesPerChapter === 0 || i === pdf.numPages) {
-      if (currentContent.trim()) {
-        chapters.push({
-          id: `pdf-chap-${chapters.length}`,
-          title: `Часть ${chapters.length + 1} (Стр. ${i - (i % pagesPerChapter || pagesPerChapter) + 1}-${i})`,
-          content: currentContent,
-          wordCount
-        });
+      if (pageText) {
+        currentContent += `<p>${pageText}</p>`;
+        wordCount += pageText.split(' ').length;
       }
-      currentContent = ''; // Очищаем для следующей главы
-      wordCount = 0;
-    }
-  }
 
-  return {
-    id: crypto.randomUUID(),
-    title: file.name.replace('.pdf', ''),
-    author: 'Извлечено из PDF',
-    chapters,
-    assets: {},
-    aiCache: { characters: {}, recaps: {} }
-  };
+      if (i % pagesPerChapter === 0 || i === pdf.numPages) {
+        if (currentContent.trim()) {
+          chapters.push({
+            id: `pdf-chap-${chapters.length}`,
+            title: `Часть ${chapters.length + 1} (Стр. ${i - (i % pagesPerChapter || pagesPerChapter) + 1}-${i})`,
+            content: currentContent,
+            wordCount
+          });
+        }
+        currentContent = ''; 
+        wordCount = 0;
+      }
+    }
+
+    if (chapters.length === 0) {
+      throw new Error("Не удалось извлечь текст из PDF (возможно, это сканированные картинки без текста).");
+    }
+
+    return {
+      id: crypto.randomUUID(),
+      title: file.name.replace('.pdf', ''),
+      author: 'Извлечено из PDF',
+      chapters,
+      assets: {},
+      aiCache: { characters: {}, recaps: {} }
+    };
+  } catch (error) {
+    console.error("Критическая ошибка при чтении PDF:", error);
+    throw error; // Передаем ошибку в UI (Reader.tsx), чтобы выскочил alert
+  }
 }
