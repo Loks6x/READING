@@ -12,7 +12,10 @@ export async function parseEpubToUnifiedJSON(file: File): Promise<UnifiedBook> {
   const spine = await book.loaded.spine;
   
   for (let i = 0; i < spine.length; i++) {
-    const section = spine.get(i);
+    // Обходим ошибку типов epubjs
+    const spineObj = spine as any;
+    const section = spineObj.get ? spineObj.get(i) : spineObj[i];
+    
     const chapter = await section.load(book.load.bind(book));
     const doc = new DOMParser().parseFromString(chapter, "application/xhtml+xml");
     
