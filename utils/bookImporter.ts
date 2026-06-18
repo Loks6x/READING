@@ -1,6 +1,12 @@
 // utils/bookImporter.ts
 import ePub from 'epubjs';
+import * as pdfjsLib from 'pdfjs-dist';
 import { UnifiedBook, UnifiedChapter } from '../types';
+
+// Подключаем Web Worker для PDF.js через надежный CDN, чтобы не нагружать Next.js
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+}
 
 // ==========================================
 // ГЛАВНЫЙ РОУТЕР (Определяет формат)
@@ -11,8 +17,9 @@ export async function parseBookToUnifiedJSON(file: File): Promise<UnifiedBook> {
   if (ext === 'epub') return parseEpub(file);
   if (ext === 'fb2') return parseFb2(file);
   if (ext === 'txt') return parseTxt(file);
+  if (ext === 'pdf') return parsePdf(file); // НОВАЯ СТРОКА
 
-  throw new Error(`Формат .${ext} пока не поддерживается. Используйте EPUB, FB2 или TXT.`);
+  throw new Error(`Формат .${ext} пока не поддерживается. Используйте EPUB, FB2, TXT или PDF.`);
 }
 
 // ==========================================
@@ -139,6 +146,62 @@ async function parseTxt(file: File): Promise<UnifiedBook> {
     id: crypto.randomUUID(),
     title: file.name.replace('.txt', ''),
     author: 'Неизвестный автор',
+    chapters,
+    assets: {},
+    aiCache: { characters: {}, recaps: {} }
+  };
+}
+
+// ==========================================
+// ПАРСЕР 4: PDF (Извлечение чистого текста)
+// ==========================================
+async function parsePdf(file: File): Promise<UnifiedBook> {
+  const arrayBuffer = await file.arrayBuffer();
+  
+  // Загружаем документ
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  
+  const chapters: UnifiedChapter[] = [];
+  const pagesPerChapter = 15; // Группируем каждые 15 страниц в одну "Главу"
+  let currentContent = '';
+  let wordCount = 0;
+
+  // Проходимся по всем страницам PDF
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    
+    // Склеиваем кусочки текста на странице
+    const pageText = textContent.items
+      .map((item: any) => item.str)
+      .join(' ')
+      .replace(/\s+/g, ' ') // Убираем двойные пробелы
+      .trim();
+
+    if (pageText) {
+      currentContent += `<p>${pageText}</p>`;
+      wordCount += pageText.split(' ').length;
+    }
+
+    // Если набрали 15 страниц ИЛИ это последняя страница книги — сохраняем главу
+    if (i % pagesPerChapter === 0 || i === pdf.numPages) {
+      if (currentContent.trim()) {
+        chapters.push({
+          id: `pdf-chap-${chapters.length}`,
+          title: `Часть ${chapters.length + 1} (Стр. ${i - (i % pagesPerChapter || pagesPerChapter) + 1}-${i})`,
+          content: currentContent,
+          wordCount
+        });
+      }
+      currentContent = ''; // Очищаем для следующей главы
+      wordCount = 0;
+    }
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    title: file.name.replace('.pdf', ''),
+    author: 'Извлечено из PDF',
     chapters,
     assets: {},
     aiCache: { characters: {}, recaps: {} }
