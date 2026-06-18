@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useReaderStore } from '../store/useReaderStore';
 import { applyBionicReading, getCharacterXRay, generateSmartRecap, speakText } from '../utils/readerCore';
+import { parseEpubToUnifiedJSON } from '../utils/bookImporter';
 
 export default function Reader() {
   const store = useReaderStore();
@@ -20,6 +21,23 @@ export default function Reader() {
   const [processedHtml, setProcessedHtml] = useState('');
   const [showHandoff, setShowHandoff] = useState(false);
   const [recapMsg, setRecapMsg] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsImporting(true);
+    try {
+      const unifiedBook = await parseEpubToUnifiedJSON(file);
+      store.setBook(unifiedBook); // Сохраняем в кэш и открываем
+    } catch (error) {
+      console.error("Ошибка импорта:", error);
+      alert("Не удалось загрузить книгу. Убедитесь, что это формат .epub");
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   // 1. Применение темы
   useEffect(() => {
@@ -96,7 +114,32 @@ export default function Reader() {
     else toggleUi();
   };
 
-  if (!book) return <div className="h-screen flex items-center justify-center">Загрузите книгу</div>;
+  if (!book) {
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center theme-${settings.theme} transition-colors duration-500`}>
+        <div className="glass-panel p-12 rounded-3xl flex flex-col items-center shadow-2xl max-w-sm w-full mx-4">
+          <div className="text-6xl mb-6">📚</div>
+          <h1 className="text-2xl font-bold mb-2">Ваша библиотека</h1>
+          <p className="text-sm opacity-60 mb-8 text-center">Загрузите книгу в формате EPUB, чтобы начать чтение</p>
+          
+          <label className="cursor-pointer w-full bg-blue-500 hover:bg-blue-600 text-white py-4 rounded-2xl font-medium transition-all flex items-center justify-center shadow-lg hover:shadow-xl active:scale-95">
+            {isImporting ? (
+              <span className="animate-pulse">Обработка EPUB...</span>
+            ) : (
+              <span>+ Выбрать книгу</span>
+            )}
+            <input 
+              type="file" 
+              accept=".epub" 
+              className="hidden" 
+              onChange={handleFileUpload} 
+              disabled={isImporting}
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
 
   const handoffUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}/sync?data=${btoa(JSON.stringify({ b: book.id, c: currentChapterIndex }))}`
