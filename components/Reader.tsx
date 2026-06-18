@@ -27,15 +27,21 @@ export default function Reader() {
     const file = e.target.files?.[0];
     if (!file) return;
     
+    console.log("⚙️ СТАРТ: Файл выбран —", file.name);
     setIsImporting(true);
+    
     try {
-      const unifiedBook = await parseEpubToUnifiedJSON(file);
-      store.setBook(unifiedBook); // Сохраняем в кэш и открываем
-    } catch (error) {
-      console.error("Ошибка импорта:", error);
-      alert("Не удалось загрузить книгу. Убедитесь, что это формат .epub");
+      console.log("⚙️ ШАГ 1: Начинаем парсинг...");
+      const unifiedBook = await parseBookToUnifiedJSON(file);
+      
+      console.log("✅ УСПЕХ: Книга распарсена!", unifiedBook);
+      store.setBook(unifiedBook);
+    } catch (error: any) {
+      console.error("❌ ОШИБКА ИМПОРТА:", error);
+      alert(`Сбой загрузки: ${error?.message || 'Неизвестная ошибка'}`);
     } finally {
       setIsImporting(false);
+      e.target.value = ''; // Сбрасываем инпут
     }
   };
 
@@ -132,7 +138,7 @@ export default function Reader() {
               type="file" 
               accept=".epub,.fb2,.txt,.pdf"
               className="hidden" 
-              onChange={handleFileUpload} 
+              onChange={d} 
               disabled={isImporting}
             />
           </label>
