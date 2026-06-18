@@ -130,7 +130,7 @@ export default function Reader() {
             )}
             <input 
               type="file" 
-              accept=".epub" 
+              accept=".epub,.fb2,.txt,.pdf"
               className="hidden" 
               onChange={handleFileUpload} 
               disabled={isImporting}
